@@ -1,0 +1,15 @@
+services:
+  plex:
+    container_name: plex
+    image: plexinc/pms-docker:plexpass
+    restart: unless-stopped
+    network_mode: "host"
+    environment:
+      - PUID=1000
+      - GUID=1000
+      - TZ=${TZ}
+    volumes:
+      - /var/lib/plexmediaserver:/config
+      - /mnt/Media:/data
+      - /tmp:/transcode
+
