@@ -5,6 +5,8 @@
 	defaultBranch = main
 [pull]
 	rebase = true
+[alias]
+    history = log --pretty=format:\"%h %s\" --graph
 [fetch]
 	prune = true
 [interactive]
