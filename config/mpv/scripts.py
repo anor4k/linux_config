@@ -15,7 +15,7 @@ SCRIPTS = [
     'https://github.com/CogentRedTester/mpv-scripts/raw/master/cycle-commands.lua',
     'https://github.com/CogentRedTester/mpv-scripts/raw/master/cycle-profile.lua',
     # SOURCE: https://github.com/mpv-player/mpv/tree/master/player/lua
-    'https://github.com/mpv-player/mpv/blob/master/player/lua/auto_profiles.lua',
+    'https://raw.githubusercontent.com/mpv-player/mpv/master/player/lua/auto_profiles.lua',
     # SOURCE: https://github.com/rossy/mpv-repl
     'https://github.com/rossy/mpv-repl/raw/master/repl.lua',
     # SOURCE: https://github.com/ekisu/mpv-webm
