@@ -1,0 +1,5 @@
+player=mpv --profile=Performance
+twitch-disable-hosting
+twitch-disable-ads
+twitch-disable-reruns
+twitch-low-latency
