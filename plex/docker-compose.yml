@@ -1,8 +1,9 @@
+version: "3"
 services:
   plex:
     container_name: plex
     image: plexinc/pms-docker:plexpass
-    restart: unless-stopped
+    restart: always
     network_mode: "host"
     environment:
       - PUID=1000
@@ -12,4 +13,12 @@ services:
       - /var/lib/plexmediaserver:/config
       - /mnt/Media:/data
       - /tmp:/transcode
-
+  plexautolanguages:
+    image: remirigal/plex-auto-languages:latest
+    network_mode: "host"
+    restart: always
+    environment:
+      - PLEX_TOKEN=${X_PLEX_TOKEN}
+      - TZ=${TZ}
+    volumes:
+      - ./plex-auto-languages:/config
