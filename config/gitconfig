@@ -1,10 +1,12 @@
 [user]
-	email = noel.eliezer@gmail.com
-	name = Noel
+	email = noel.eliezer@magazineluiza.com.br
+	name = Noel Viscome Eliezer
 [init]
 	defaultBranch = main
 [pull]
 	rebase = true
+[push]
+    autoSetupRemote = true
 [alias]
     history = log --pretty=format:\"%h %s\" --graph
 [fetch]
@@ -15,3 +17,5 @@
 	log = /usr/share/git/diff-highlight/diff-highlight | less
 	show = /usr/share/git/diff-highlight/diff-highlight | less
 	diff = /usr/share/git/diff-highlight/diff-highlight | less
+[credential]
+    helper = store
