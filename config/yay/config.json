@@ -1,6 +1,6 @@
 {
 	"sudoloop": true,
+	"devel": true,
 	"combinedupgrade": true,
 	"batchinstall": true
 }
-
