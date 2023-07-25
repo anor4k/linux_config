@@ -9,6 +9,7 @@
     autoSetupRemote = true
 [alias]
     history = log --pretty=format:\"%h %s\" --graph
+    cleanup = !git branch --merged | grep -v `git remote show origin | awk '/HEAD branch/ {print $NF}'` | xargs -r git branch -d
 [fetch]
 	prune = true
 [interactive]
