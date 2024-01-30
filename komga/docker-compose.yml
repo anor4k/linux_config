@@ -1,0 +1,17 @@
+services:
+  komga:
+    image: gotson/komga
+    container_name: komga
+    volumes:
+      - type: bind
+        source: /var/lib/komga
+        target: /config
+      - type: bind
+        source: /mnt/Media/Books
+        target: /data
+    ports:
+      - 25600:25600
+    environment:
+      - TZ=America/Sao_Paulo
+    restart: unless-stopped
+

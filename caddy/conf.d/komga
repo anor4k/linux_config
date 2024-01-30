@@ -1,0 +1,3 @@
+home.anorak.dev:25601, localhost:25601 {
+    reverse_proxy :25600
+}

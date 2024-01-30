@@ -1,0 +1,7 @@
+services:
+  homebridge:
+    image: homebridge/homebridge:latest
+    restart: always
+    network_mode: host
+    volumes:
+      - /var/lib/homebridge:/homebridge
