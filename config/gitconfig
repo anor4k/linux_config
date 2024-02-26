@@ -1,6 +1,7 @@
 [user]
 	email = noel.eliezer@gmail.com
 	name = Noel
+	signingKey = /home/noel/.ssh/id_ed25519.pub
 [init]
 	defaultBranch = main
 [pull]
@@ -24,3 +25,5 @@
 	enabled = true
 [includeIf "gitdir:~/Projects/uncover/"]
     path = "~/Projects/uncover/.gitconfig"
+[gpg]
+	format = ssh
