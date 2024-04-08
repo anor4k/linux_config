@@ -1,4 +1,4 @@
 .env
 .directory
-plex/plex-auto-languages/cache/
-
+*.sqlite
+**/cache/**
