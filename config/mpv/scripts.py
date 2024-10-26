@@ -9,8 +9,8 @@ SCRIPTS = [
     'https://raw.githubusercontent.com/mpv-player/mpv/master/TOOLS/lua/autocrop.lua',
     'https://raw.githubusercontent.com/mpv-player/mpv/master/TOOLS/lua/autoload.lua',
     'https://raw.githubusercontent.com/mpv-player/mpv/master/TOOLS/lua/status-line.lua',
-    # SOURCE: https://github.com/cyl0/MordenX
-    'https://raw.githubusercontent.com/cyl0/MordenX/main/mordenx.lua',
+    # SOURCE: https://github.com/cyl0/ModernX
+    'https://raw.githubusercontent.com/cyl0/ModernX/main/modernx.lua',
     # SOURCE: https://github.com/CogentRedTester/mpv-scripts
     'https://github.com/CogentRedTester/mpv-scripts/raw/master/cycle-commands.lua',
     'https://github.com/CogentRedTester/mpv-scripts/raw/master/cycle-profile.lua',

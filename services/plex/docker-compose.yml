@@ -1,4 +1,3 @@
-version: "3"
 services:
   plex:
     container_name: plex
@@ -11,10 +10,11 @@ services:
       - TZ=${TZ}
     volumes:
       - /var/lib/plexmediaserver:/config
-      - /mnt/Media:/data
+      - /mnt/data/media:/data
       - /tmp:/transcode
   plexautolanguages:
     image: remirigal/plex-auto-languages:latest
+    container_name: plex-auto-languages
     network_mode: "host"
     restart: always
     environment:

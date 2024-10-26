@@ -1,4 +1,5 @@
-player=mpv --profile=Performance
+player=mpv
+player-args=--profile=Performance
 twitch-disable-hosting
 twitch-disable-ads
 twitch-disable-reruns

@@ -22,6 +22,7 @@
 [core]
     quotepath = off
     pager = delta
+    autocrlf = input
 
 [delta]
     navigate = true
