@@ -1,0 +1,15 @@
+home.anorak.dev:4747, localhost:4747 {
+    reverse_proxy servatrice:4747
+}
+
+http://home.anorak.dev:4747, http://localhost:4747 {
+    redir https://home.anorak.dev:4747{uri}
+}
+
+home.anorak.dev:4748, localhost:4748 {
+    reverse_proxy servatrice:4748
+}
+
+http://home.anorak.dev:4748, http://localhost:4748 {
+    redir https://home.anorak.dev:4748{uri}
+}

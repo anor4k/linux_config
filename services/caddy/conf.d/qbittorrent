@@ -1,3 +1,3 @@
 home.anorak.dev:30000, localhost:30000 {
-    reverse_proxy :30001
+    reverse_proxy host.docker.internal:30001
 }

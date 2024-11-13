@@ -1,0 +1,40 @@
+services:
+  servatrice-mysql:
+    container_name: servatrice-mysql
+    image: mysql
+    command: --sql_mode=
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=servatrice
+      - MYSQL_USER=servatrice
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - ./servatrice.sql:/docker-entrypoint-initdb.d/servatrice.sql
+      - servatrice-mysql:/var/lib/mysql
+    networks:
+      - anorak
+  servatrice:
+    container_name: servatrice
+    depends_on:
+      - servatrice-mysql
+    build:
+      context: /home/noel/Projects/Cockatrice
+      dockerfile: Dockerfile
+    image: servatrice
+    expose:
+      - 4747
+      - 4748
+    entrypoint: "/bin/bash -c 'sleep 5;servatrice --config /etc/servatrice.ini --log-to-console'"
+    restart: always
+    volumes:
+      - ./servatrice.ini:/etc/servatrice.ini
+    networks:
+      - anorak
+
+networks:
+  anorak:
+    name: anorak
+    external: true
+
+volumes:
+  servatrice-mysql:
