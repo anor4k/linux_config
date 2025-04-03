@@ -1,0 +1,12 @@
+[gcloud]
+disabled = true
+
+[direnv]
+disabled = false
+symbol = 'env '
+detect_files = ['.env']
+format = '[$symbol$loaded/$allowed]($style) '
+
+[python]
+symbol = "\ue606  "
+
