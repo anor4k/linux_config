@@ -5,8 +5,6 @@ from urllib.request import urlretrieve
 
 SCRIPTS = [
     # SOURCE: https://github.com/mpv-player/mpv/tree/master/TOOLS/lua
-    'https://raw.githubusercontent.com/mpv-player/mpv/master/TOOLS/lua/acompressor.lua',
-    'https://raw.githubusercontent.com/mpv-player/mpv/master/TOOLS/lua/autocrop.lua',
     'https://raw.githubusercontent.com/mpv-player/mpv/master/TOOLS/lua/autoload.lua',
     'https://raw.githubusercontent.com/mpv-player/mpv/master/TOOLS/lua/status-line.lua',
     # SOURCE: https://github.com/cyl0/ModernX

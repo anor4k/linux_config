@@ -1,0 +1,19 @@
+services:
+  openhands-app:
+    image: docker.all-hands.dev/all-hands-ai/openhands:0.23
+    container_name: openhands-app
+    restart: unless-stopped
+    environment:
+      - SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:0.23-nikolaik
+      - LOG_ALL_EVENTS=true
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp.json
+      - VERTEXAI_PROJECT=${VERTEXAI_PROJECT}
+      - VERTEXAI_LOCATION=${VERTEXAI_LOCATION}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/noel/openhands-anorak-8c8a4c98ce2e.json:/gcp.json:ro
+      - ~/.openhands-state:/.openhands-state
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

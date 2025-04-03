@@ -8,10 +8,13 @@ services:
       - PUID=1000
       - GUID=1000
       - TZ=${TZ}
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
     volumes:
       - /var/lib/plexmediaserver:/config
       - /mnt/data/media:/data
-      - /tmp:/transcode
+    tmpfs:
+      - /transcode
   plexautolanguages:
     container_name: plex-auto-languages
     image: remirigal/plex-auto-languages:latest

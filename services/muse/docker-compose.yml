@@ -1,7 +1,7 @@
 services:
   muse:
     container_name: muse
-    image: codetheweb/muse:latest
+    image: ghcr.io/museofficial/muse:latest
     restart: always
     volumes:
       - .:/data
