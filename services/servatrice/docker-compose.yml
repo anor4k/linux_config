@@ -12,6 +12,7 @@ services:
     volumes:
       - ./servatrice.sql:/docker-entrypoint-initdb.d/servatrice.sql
       - servatrice-mysql:/var/lib/mysql
+      - /home/noel/Cockatrice/servatrice/migrations:/migrations
     networks:
       - anorak
   servatrice:
@@ -19,7 +20,7 @@ services:
     depends_on:
       - servatrice-mysql
     build:
-      context: /home/noel/Projects/Cockatrice
+      context: /home/noel/Cockatrice
       dockerfile: Dockerfile
     image: servatrice
     expose:

@@ -8,13 +8,21 @@ services:
       - PUID=1000
       - GUID=1000
       - TZ=${TZ}
-    devices:
-      - /dev/dri/renderD128:/dev/dri/renderD128
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     volumes:
       - /var/lib/plexmediaserver:/config
       - /mnt/data/media:/data
     tmpfs:
       - /transcode
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
   plexautolanguages:
     container_name: plex-auto-languages
     image: remirigal/plex-auto-languages:latest

@@ -1,0 +1,21 @@
+services:
+  qbittorrent-nox:
+    container_name: qbittorrent-nox
+    environment:
+      - QBT_LEGAL_NOTICE=${QBT_LEGAL_NOTICE}
+      - QBT_VERSION=${QBT_VERSION}
+      - QBT_WEBUI_PORT=${QBT_WEBUI_PORT}
+      - TZ=${TZ}
+    image: qbittorrentofficial/qbittorrent-nox:${QBT_VERSION}
+    ports:
+      - 6881:6881/tcp
+      - 6881:6881/udp
+      - ${QBT_WEBUI_PORT}:${QBT_WEBUI_PORT}/tcp
+    read_only: true
+    stop_grace_period: 30m
+    tmpfs:
+      - /tmp
+    tty: true
+    volumes:
+      - ${QBT_CONFIG_PATH}:/config
+      - ${QBT_DOWNLOADS_PATH}:/mnt/data
