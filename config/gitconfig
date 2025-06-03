@@ -39,7 +39,7 @@
 
 [rerere]
     enabled = true
-[includeIf "gitdir:~/uncover/"]
-    path = "~/uncover/.gitconfig"
+[includeIf "gitdir:~/yofi/"]
+    path = "~/yofi/.gitconfig"
 [color]
 	ui = auto

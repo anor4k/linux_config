@@ -13,3 +13,5 @@ alias tree="eza --tree"
 
 starship init fish | source
 direnv hook fish | source
+
+bind ctrl-e expand_path_to_absolute
