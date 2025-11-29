@@ -1,0 +1,2 @@
+- separate config/dotfiles repo from services
+- create python configuration with a single source of network configuration for all services, including cloudflare zero trust config

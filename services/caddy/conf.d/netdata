@@ -1,3 +1,0 @@
-localhost:20000 {
-  reverse_proxy host.docker.internal:19999
-}

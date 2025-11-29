@@ -19,3 +19,4 @@ services:
     volumes:
       - ${QBT_CONFIG_PATH}:/config
       - ${QBT_DOWNLOADS_PATH}:/mnt/data
+    restart: unless-stopped

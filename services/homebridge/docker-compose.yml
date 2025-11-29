@@ -5,4 +5,4 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - /var/lib/homebridge:/homebridge    
+      - /var/lib/homebridge:/homebridge

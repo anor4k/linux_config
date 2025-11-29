@@ -1,19 +1,12 @@
 services:
   komga:
     container_name: komga
-    image: gotson/komga:1.x
+    image: gotson/komga:latest
     environment:
       - TZ=America/Sao_Paulo
     restart: unless-stopped
-    expose:
-      - 25600
+    ports:
+      - 25600:25600
     volumes:
       - /var/lib/komga:/config
       - /mnt/data/media/Books:/data
-    networks:
-      - anorak
-
-networks:
-  anorak:
-    name: anorak
-    external: true

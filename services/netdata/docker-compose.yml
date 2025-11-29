@@ -28,4 +28,4 @@ services:
 volumes:
   netdataconfig:
   netdatalib:
-  netdatacache:    
+  netdatacache:

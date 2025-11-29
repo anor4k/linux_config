@@ -13,8 +13,7 @@ services:
       - ./servatrice.sql:/docker-entrypoint-initdb.d/servatrice.sql
       - servatrice-mysql:/var/lib/mysql
       - /home/noel/Cockatrice/servatrice/migrations:/migrations
-    networks:
-      - anorak
+
   servatrice:
     container_name: servatrice
     depends_on:
@@ -23,20 +22,13 @@ services:
       context: /home/noel/Cockatrice
       dockerfile: Dockerfile
     image: servatrice
-    expose:
-      - 4747
-      - 4748
+    ports:
+      - 4747:4747
+      - 4748:4748
     entrypoint: "/bin/bash -c 'sleep 10;servatrice --config /etc/servatrice.ini --log-to-console'"
     restart: unless-stopped
     volumes:
       - ./servatrice.ini:/etc/servatrice.ini
-    networks:
-      - anorak
-
-networks:
-  anorak:
-    name: anorak
-    external: true
 
 volumes:
   servatrice-mysql:

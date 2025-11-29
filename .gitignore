@@ -2,3 +2,4 @@
 .directory
 *.sqlite
 **/cache/**
+*.tar.gz

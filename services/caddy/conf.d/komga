@@ -1,3 +1,0 @@
-home.anorak.dev:25600, localhost:25600 {
-    reverse_proxy http://komga:25600
-}
