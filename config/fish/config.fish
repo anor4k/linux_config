@@ -10,6 +10,7 @@ zoxide init fish --cmd cd | source
 abbr --add ls eza
 abbr --add cat bat
 alias tree="eza --tree"
+alias hx=helix
 
 starship init fish | source
 direnv hook fish | source
