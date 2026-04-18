@@ -1,8 +1,0 @@
-services:
-  homebridge:
-    container_name: homebridge
-    image: homebridge/homebridge:latest
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - /var/lib/homebridge:/homebridge
