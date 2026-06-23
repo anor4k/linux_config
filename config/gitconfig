@@ -14,8 +14,9 @@
 
 [alias]
     history = log --pretty=format:\"%h %s\" --graph
-    cleanup = !git branch --merged | grep -v `git remote show origin | awk '/HEAD branch/ {print $NF}'` | xargs -r git branch -d
-	zip = "!git archive HEAD -o ${PWD##*/}.zip"
+    cleanup = !git branch --merged | grep -vE '^[ *+]*(main|master|production|dev)$' | xargs -r git branch -d
+    zip = "!git archive HEAD -o ${PWD##*/}.zip"
+	squash = "!f(){ git reset --soft \"$1\" && git commit; }; f"
 
 [fetch]
     prune = true
@@ -37,9 +38,14 @@
 [diff]
     colorMoved = default
 
-[rerere]
-    enabled = true
-[includeIf "gitdir:~/yofi/"]
-    path = "~/yofi/.gitconfig"
 [color]
 	ui = auto
+
+[advice]
+	skippedCherryPicks = false
+
+[rerere]
+    enabled = true
+
+[includeIf "gitdir:~/yofi/"]
+    path = "~/yofi/.gitconfig"
