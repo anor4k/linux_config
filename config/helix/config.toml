@@ -1,0 +1,4 @@
+theme = "onedark"
+
+[editor.smart-tab]
+enable = false
