@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Restore ODM 2:1 combine when DC drops it (amdgpu DCN32 bug workaround).
+#
+# The bug: after the monitor powers off and back on, DC re-enables the pipe with
+# ODM combine = 1 segment. At 4K144 one pipe cannot sustain the pixel rate, so
+# the scanout produces flashing horizontal bands. A modeset round-trip restores
+# ODM 2:1.
+#
+# Key detail: odm_combine_segments reads "-95" (-EOPNOTSUPP) while the connector
+# is DPMS-off. That is "not ready", NOT "needs fixing" — toggling then is useless
+# and previously drove the watcher into a 60s backoff, so the real fix arrived
+# ~30-40s late. We gate every action on DPMS state instead.
+set -u
+
+DRM_CONN="DP-3"
+KS_OUT="DP-3"
+MODE_GOOD="3840x2160@144"
+MODE_TEMP="3840x2160@60"     # any non-ODM mode works as the intermediate
+WANT=2
+POLL=1                       # cheap: a sysfs read, no sudo
+SETTLE=2                     # let kwin finish its own wake handling
+SWEEP=30                     # periodic re-check while display is on
+MAX_TRIES=3
+COOLDOWN=60
+
+DPMS_FILE=""
+for f in /sys/class/drm/card*-"$DRM_CONN"/dpms; do
+  [ -r "$f" ] && DPMS_FILE="$f" && break
+done
+[ -n "$DPMS_FILE" ] || { echo "no dpms attribute for $DRM_CONN"; exit 1; }
+
+command -v jq >/dev/null || { echo "jq not installed"; exit 1; }
+
+dpms_state() { cat "$DPMS_FILE" 2>/dev/null || echo Unknown; }
+segments()   { sudo -n /usr/local/bin/odm-segments "$DRM_CONN" 2>/dev/null; }
+
+current_mode() {
+  kscreen-doctor -j 2>/dev/null | jq -r --arg out "$KS_OUT" '
+    .outputs[] | select(.name == $out) | select(.enabled)
+    | .currentModeId as $id
+    | (.modes[] | select(.id == $id) | .name) // empty'
+}
+
+toggle() {
+  kscreen-doctor "output.${KS_OUT}.mode.${MODE_TEMP}" \
+    && sleep 1 \
+    && kscreen-doctor "output.${KS_OUT}.mode.${MODE_GOOD}"
+}
+
+# Returns 0 if ODM is (or was made) correct, 1 if we should back off.
+ensure_odm() {
+  local s m i
+  for ((i = 1; i <= MAX_TRIES; i++)); do
+    [[ "$(dpms_state)" == "On" ]] || { echo "display went off mid-fix — aborting"; return 0; }
+
+    s=$(segments)
+    if ! [[ "$s" =~ ^[0-9]+$ ]]; then
+      # -95/-EOPNOTSUPP or empty: pipe not ready yet. Wait, do not toggle.
+      echo "segments unavailable (${s:-empty}) — waiting"
+      sleep 2
+      continue
+    fi
+
+    [[ "$s" == "$WANT" ]] && { [[ $i -gt 1 ]] && echo "ODM ok (segments=$s)"; return 0; }
+
+    m=$(current_mode)
+    if [[ "$m" != "$MODE_GOOD" ]]; then
+      echo "mode is ${m:-unknown}, not ${MODE_GOOD} — nothing to do"
+      return 0
+    fi
+
+    echo "segments=$s at $m — toggling (attempt $i)"
+    toggle || echo "toggle command failed"
+    sleep 3
+  done
+
+  echo "still segments=$(segments) after ${MAX_TRIES} attempts — backing off ${COOLDOWN}s"
+  return 1
+}
+
+echo "watching ${DRM_CONN}: want ${WANT} segments at ${MODE_GOOD} (dpms-gated)"
+
+prev=$(dpms_state)
+last_sweep=$SECONDS
+
+while :; do
+  now=$(dpms_state)
+
+  if [[ "$now" == "On" && "$prev" != "On" ]]; then
+    echo "display woke (${prev} -> On)"
+    sleep "$SETTLE"
+    ensure_odm || sleep "$COOLDOWN"
+    last_sweep=$SECONDS
+  elif [[ "$now" == "On" && $((SECONDS - last_sweep)) -ge $SWEEP ]]; then
+    # Safety net: catch an ODM drop that happens without a DPMS transition.
+    s=$(segments)
+    if [[ "$s" =~ ^[0-9]+$ && "$s" != "$WANT" ]]; then
+      ensure_odm || sleep "$COOLDOWN"
+    fi
+    last_sweep=$SECONDS
+  fi
+
+  prev=$now
+  sleep "$POLL"
+done

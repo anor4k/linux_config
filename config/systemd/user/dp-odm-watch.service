@@ -1,0 +1,15 @@
+[Unit]
+Description=Restore ODM 2:1 combine on DP-3 after monitor wake (amdgpu DCN32 workaround)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Needs the session bus to talk to kscreen/kwin via kscreen-doctor.
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStart=%h/.local/bin/dp-odm-watch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
