@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# steam-tv-display — put Steam Big Picture on the LG TV, revert on exit.
+#
+# Mechanism (verified on this machine): changing the primary does NOT move an
+# already-open Big Picture window. What reliably moves it is un-fullscreening
+# it, repositioning it into the TV's region, then re-fullscreening. So "on"
+# enables the TV as primary at 0,0 (so newly-launched games open on it), keeps
+# the monitor on as a secondary to its right, and then moves the Big Picture
+# window onto the TV. "off" disables the TV again.
+# Audio is switched to the TV's HDMI sink while active and restored after.
+#
+# Usage: steam-tv-display {on|off|watch|status|move}
+set -uo pipefail
+
+# --- configuration ---------------------------------------------------------
+TV="HDMI-A-1"                 # LG C1 output (kscreen/xrandr name)
+MON="DP-3"                    # main monitor output
+# Mode/scale/HDR/VRR are NOT hardcoded here: they are read back from KWin's own
+# saved per-display config (see tv_desired) so that whatever you set in System
+# Settings > Display Configuration is what the script re-applies. Anything this
+# script does not name explicitly, KWin restores itself when the output is
+# enabled (sdrBrightness, peak brightness override, colour power tradeoff, ...).
+KWIN_OUTPUT_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/kwinoutputconfig.json"
+GPU_AUDIO_MATCH="pci-0000_03_00.1"   # AMD GPU HDMI/DP audio device match
+SWITCH_AUDIO=1               # 1 = also move sound to the TV while active
+# Unlock the session when Big Picture appears while locked. Steam reads the
+# controller over hidraw, which bypasses the screen locker's input grab, so a
+# controller double-tap still opens Big Picture behind the lock screen; that
+# window appearing is our signal to unlock. NOTE: this makes the controller a
+# physical unlock key — anyone in wireless range can unlock the session.
+UNLOCK_ON_BP=1
+
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/steam-tv-display"
+PREV_SINK_FILE="$STATE_DIR/prev-sink"
+mkdir -p "$STATE_DIR"
+
+log() { printf '[steam-tv-display] %s\n' "$*"; }
+
+# --- audio helpers ---------------------------------------------------------
+tv_sink() {
+  pactl list short sinks 2>/dev/null | awk '{print $2}' \
+    | grep -E "${GPU_AUDIO_MATCH}\..*hdmi" | head -n1
+}
+
+audio_to_tv() {
+  [ "$SWITCH_AUDIO" = 1 ] || return 0
+  local sink cur i
+  for _ in 1 2 3 4 5 6 7 8; do sink=$(tv_sink); [ -n "$sink" ] && break; sleep 0.5; done
+  [ -z "$sink" ] && { log "TV audio sink not found; leaving audio as-is"; return 0; }
+  cur=$(pactl get-default-sink 2>/dev/null)
+  if [ -n "$cur" ] && [ "$cur" != "$sink" ]; then printf '%s\n' "$cur" > "$PREV_SINK_FILE"; fi
+  pactl set-default-sink "$sink" 2>/dev/null
+  for i in $(pactl list short sink-inputs 2>/dev/null | awk '{print $1}'); do
+    pactl move-sink-input "$i" "$sink" 2>/dev/null
+  done
+  log "audio -> $sink"
+}
+
+audio_restore() {
+  [ "$SWITCH_AUDIO" = 1 ] || return 0
+  [ -f "$PREV_SINK_FILE" ] || return 0
+  local prev i; prev=$(cat "$PREV_SINK_FILE")
+  rm -f "$PREV_SINK_FILE"
+  [ -z "$prev" ] && return 0
+  pactl list short sinks 2>/dev/null | awk '{print $2}' | grep -qx "$prev" || { log "prev sink gone"; return 0; }
+  pactl set-default-sink "$prev" 2>/dev/null
+  for i in $(pactl list short sink-inputs 2>/dev/null | awk '{print $1}'); do
+    pactl move-sink-input "$i" "$prev" 2>/dev/null
+  done
+  log "audio restored -> $prev"
+}
+
+# --- session lock helpers --------------------------------------------------
+# The graphical session: prefer $XDG_SESSION_ID, else the seated class=user
+# session. (Session class=manager is the systemd user manager and has no lock
+# screen, so it must not be picked.)
+session_id() {
+  local s cls seat
+  if [ -n "${XDG_SESSION_ID:-}" ] \
+     && [ "$(loginctl show-session "$XDG_SESSION_ID" -p Class --value 2>/dev/null)" = "user" ]; then
+    printf '%s\n' "$XDG_SESSION_ID"; return 0
+  fi
+  for s in $(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}'); do
+    cls=$(loginctl show-session "$s" -p Class --value 2>/dev/null)
+    seat=$(loginctl show-session "$s" -p Seat --value 2>/dev/null)
+    if [ "$cls" = "user" ] && [ -n "$seat" ]; then printf '%s\n' "$s"; return 0; fi
+  done
+  return 1
+}
+
+session_locked() {
+  local sid; sid=$(session_id) || return 1
+  [ "$(loginctl show-session "$sid" -p LockedHint --value 2>/dev/null)" = "yes" ]
+}
+
+unlock_session() {
+  [ "$UNLOCK_ON_BP" = 1 ] || return 0
+  session_locked || return 0
+  local sid; sid=$(session_id) || return 1
+  log "session $sid is locked -> unlocking (Big Picture launched)"
+  loginctl unlock-session "$sid" 2>&1 | sed 's/^/[loginctl] /'
+  sleep 1   # let the locker tear down before display changes
+}
+
+# --- window helpers --------------------------------------------------------
+bp_window_id() { wmctrl -lx 2>/dev/null | awk 'tolower($0) ~ /big picture mode/ {print $1; exit}'; }
+bp_present()   { [ -n "$(bp_window_id)" ]; }
+
+# X origin (native px) of the TV as XWayland/xrandr sees it — the target the
+# windowmove needs. Scans fields so it works whether or not TV is "primary".
+tv_x_origin() {
+  xrandr 2>/dev/null | awk -v o="$TV" '
+    $1==o && $2=="connected" {
+      for (i=3;i<=NF;i++) if ($i ~ /^[0-9]+x[0-9]+\+[0-9]+\+[0-9]+$/) { n=split($i,a,"+"); print a[2]; exit }
+    }'
+}
+
+move_bp_to_tv() {
+  local id x
+  id=$(bp_window_id)
+  [ -z "$id" ] && { log "no Big Picture window to move"; return 0; }
+  x=$(tv_x_origin)
+  [ -z "$x" ] && { log "could not read TV x-origin from xrandr"; return 1; }
+  log "moving Big Picture ($id) onto TV at x=$x"
+  # the sequence that works: drop fullscreen, move into the TV rect, re-fullscreen
+  wmctrl -ir "$id" -b remove,fullscreen 2>/dev/null; sleep 0.5
+  xdotool windowmove "$id" "$x" 0 2>/dev/null;        sleep 0.5
+  wmctrl -ir "$id" -b add,fullscreen 2>/dev/null;     sleep 0.5
+}
+
+# --- desired-settings lookup ----------------------------------------------
+# KWin stores one entry per physical display (keyed by EDID) in
+# kwinoutputconfig.json, and kscreen-doctor reports the uuid of that entry for
+# the live connector. Matching on the uuid rather than the connector name is
+# what keeps us on the C1's entry and not a stale one left behind by some other
+# display that was once plugged into HDMI-A-1.
+#
+# Prints: MODE=<WxH@R> SCALE=<s> LOGICAL_W=<px>
+tv_desired() {
+  local uuid
+  uuid=$(kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' \
+         | awk -v o="$TV" '$1=="Output:" && $3==o {print $4; exit}')
+  [ -z "$uuid" ] && { log "could not resolve kscreen uuid for $TV"; return 1; }
+  python3 - "$KWIN_OUTPUT_CONF" "$uuid" <<'PY'
+import json, sys
+conf, uuid = sys.argv[1], sys.argv[2]
+try:
+    doc = json.load(open(conf))
+except Exception as e:
+    sys.exit("read %s: %s" % (conf, e))
+outs = next((s["data"] for s in doc if s.get("name") == "outputs"), [])
+o = next((o for o in outs if o.get("uuid") == uuid), None)
+if o is None:
+    sys.exit("no saved config for uuid %s" % uuid)
+m = o.get("mode") or {}
+w, h, r = m.get("width"), m.get("height"), m.get("refreshRate")
+if not (w and h and r):
+    sys.exit("saved config for %s has no usable mode" % uuid)
+scale = o.get("scale", 1) or 1
+# kscreen-doctor wants refresh in Hz; KWin stores mHz.
+hz = round(r / 1000)
+print("MODE=%dx%d@%d SCALE=%s LOGICAL_W=%d" % (w, h, hz, scale, round(w / scale)))
+PY
+}
+
+# --- display helpers -------------------------------------------------------
+display_on() {
+  # TV becomes PRIMARY so freshly-launched game windows open on it; the
+  # monitor stays on as a secondary to the right. The already-open Big
+  # Picture window is moved separately (a primary switch won't relocate it).
+  #
+  # Only geometry is asserted here (mode/scale/position/priority), and even
+  # those come from the saved Display Configuration. HDR, WCG, VRR, SDR
+  # brightness and the peak-brightness override are deliberately NOT passed:
+  # naming them on the command line would rewrite them in kwinoutputconfig.json
+  # and silently undo whatever was set in System Settings.
+  local desired MODE SCALE LOGICAL_W try
+  # The TV advertises a cut-down EDID (1080p only, no HDR) while it is asleep,
+  # so give it a few tries to come back with its real mode list.
+  for try in 1 2 3 4 5 6; do
+    desired=$(tv_desired) && break
+    sleep 1
+  done
+  if [ -z "${desired:-}" ]; then
+    log "no saved config for $TV; enabling with KWin's own defaults"
+    kscreen-doctor output."$TV".enable output."$TV".position.0,0 output."$TV".priority.1 \
+                   output."$MON".enable output."$MON".priority.2
+    sleep 1.5
+    return 0
+  fi
+  eval "$desired"
+  log "enable $TV as primary ($MODE, scale $SCALE); keep $MON on (secondary, right)"
+  kscreen-doctor \
+    output."$TV".enable output."$TV".mode."$MODE" output."$TV".scale."$SCALE" \
+    output."$TV".position.0,0 output."$TV".priority.1 \
+    output."$MON".enable output."$MON".position."${LOGICAL_W}",0 output."$MON".priority.2
+  sleep 1.5   # let the mode apply and xrandr geometry settle
+}
+
+display_off() {
+  log "disable $TV; $MON primary"
+  kscreen-doctor \
+    output."$MON".enable output."$MON".position.0,0 output."$MON".priority.1 \
+    output."$TV".disable
+}
+
+# --- commands --------------------------------------------------------------
+case "${1:-}" in
+  on)   display_on; move_bp_to_tv; audio_to_tv ;;
+  off)  audio_restore; display_off ;;
+  move) move_bp_to_tv ;;
+  status)
+        echo "Big Picture window: $(bp_window_id || echo '(none)')"
+        echo "TV x-origin: $(tv_x_origin || echo '(n/a)')"
+        echo "TV sink: $(tv_sink || echo '(none)')"
+        kscreen-doctor -o 2>/dev/null | grep -E 'Output:|priority|enabled|disabled' | grep -v Overscan
+        ;;
+  watch)
+        log "watching for Big Picture (poll 1s)"
+        active=0
+        if bp_present; then display_on; move_bp_to_tv; audio_to_tv; active=1; fi
+        while true; do
+          if bp_present; then
+            if [ "$active" -eq 0 ]; then log "Big Picture opened"; unlock_session; display_on; move_bp_to_tv; audio_to_tv; active=1; fi
+          else
+            if [ "$active" -eq 1 ]; then log "Big Picture closed"; audio_restore; display_off; active=0; fi
+          fi
+          sleep 1
+        done
+        ;;
+  *)    echo "Usage: steam-tv-display {on|off|watch|status|move}" >&2; exit 2 ;;
+esac
