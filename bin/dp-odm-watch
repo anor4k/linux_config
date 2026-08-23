@@ -14,7 +14,7 @@ set -u
 
 DRM_CONN="DP-3"
 KS_OUT="DP-3"
-MODE_GOOD="3840x2160@144"
+MODE_GOOD="3840x2160@120"
 MODE_TEMP="3840x2160@60"     # any non-ODM mode works as the intermediate
 WANT=2
 POLL=1                       # cheap: a sysfs read, no sudo
