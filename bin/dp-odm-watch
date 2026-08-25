@@ -23,6 +23,8 @@ SWEEP=30                     # periodic re-check while display is on
 MAX_TRIES=3
 COOLDOWN=60
 
+MULTI_NOTED=0                # 1 while we are standing down for a second output
+
 DPMS_FILE=""
 for f in /sys/class/drm/card*-"$DRM_CONN"/dpms; do
   [ -r "$f" ] && DPMS_FILE="$f" && break
@@ -41,6 +43,10 @@ current_mode() {
     | (.modes[] | select(.id == $id) | .name) // empty'
 }
 
+enabled_outputs() {
+  kscreen-doctor -j 2>/dev/null | jq -r '[.outputs[] | select(.enabled)] | length'
+}
+
 toggle() {
   kscreen-doctor "output.${KS_OUT}.mode.${MODE_TEMP}" \
     && sleep 1 \
@@ -49,7 +55,25 @@ toggle() {
 
 # Returns 0 if ODM is (or was made) correct, 1 if we should back off.
 ensure_odm() {
-  local s m i
+  local s m i n
+
+  # ODM 2:1 puts two pipes on one output. While a second display is enabled DC
+  # has no spare pipe, so segments legitimately reads 1 and no amount of
+  # modesetting will change it. Toggling anyway modesets DP-3 six times a
+  # minute for the whole session, which stalls presentation on BOTH outputs --
+  # that was the real cause of the "TV-only" game stutter. steam-tv-display
+  # drops DP-3 to a refresh one pipe can drive for the duration instead.
+  n=$(enabled_outputs)
+  if [[ "$n" =~ ^[0-9]+$ && "$n" -gt 1 ]]; then
+    [[ "$MULTI_NOTED" == 1 ]] || echo "${n} outputs enabled — ODM 2:1 unavailable, standing down"
+    MULTI_NOTED=1
+    return 0
+  fi
+  if [[ "$MULTI_NOTED" == 1 ]]; then
+    echo "back to a single output — resuming ODM checks"
+    MULTI_NOTED=0
+  fi
+
   for ((i = 1; i <= MAX_TRIES; i++)); do
     [[ "$(dpms_state)" == "On" ]] || { echo "display went off mid-fix — aborting"; return 0; }
 

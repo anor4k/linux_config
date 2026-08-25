@@ -22,6 +22,14 @@ MON="DP-3"                    # main monitor output
 # enabled (sdrBrightness, peak brightness override, colour power tradeoff, ...).
 KWIN_OUTPUT_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/kwinoutputconfig.json"
 GPU_AUDIO_MATCH="pci-0000_03_00.1"   # AMD GPU HDMI/DP audio device match
+# While the TV is enabled, DC has no spare pipe for ODM 2:1 on the monitor, and
+# a single DCN3.2 pipe cannot cleanly drive DP-3 at 4K120/144 -- the scanout
+# glitches. dp-odm-watch cannot fix that (the pipe is genuinely in use), and its
+# retry loop modesets DP-3 every ~100s, stalling presentation on the TV as well.
+# So park the monitor at a refresh one pipe can sustain for the duration and
+# restore its previous mode on the way out.
+MON_MODE_SHARED="3840x2160@60"
+MON_MODE_FALLBACK="3840x2160@120"   # used only if the pre-switch mode is unknown
 SWITCH_AUDIO=1               # 1 = also move sound to the TV while active
 # Unlock the session when Big Picture appears while locked. Steam reads the
 # controller over hidraw, which bypasses the screen locker's input grab, so a
@@ -32,6 +40,7 @@ UNLOCK_ON_BP=1
 
 STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/steam-tv-display"
 PREV_SINK_FILE="$STATE_DIR/prev-sink"
+PREV_MON_MODE_FILE="$STATE_DIR/prev-mon-mode"
 mkdir -p "$STATE_DIR"
 
 log() { printf '[steam-tv-display] %s\n' "$*"; }
@@ -163,6 +172,32 @@ print("MODE=%dx%d@%d SCALE=%s LOGICAL_W=%d" % (w, h, hz, scale, round(w / scale)
 PY
 }
 
+# --- monitor mode helpers --------------------------------------------------
+# Read DP-3's live mode name ("3840x2160@120"). Note we stash this rather than
+# reading it back from kwinoutputconfig.json later: kscreen-doctor PERSISTS the
+# mode it is given, so once we set 60 the saved config says 60 and the original
+# refresh is no longer recoverable from KWin.
+mon_mode() {
+  kscreen-doctor -j 2>/dev/null | jq -r --arg out "$MON" '
+    .outputs[] | select(.name == $out) | select(.enabled)
+    | .currentModeId as $id
+    | (.modes[] | select(.id == $id) | .name) // empty'
+}
+
+mon_mode_stash() {
+  local cur; cur=$(mon_mode)
+  [ -z "$cur" ] && { log "could not read $MON mode; not stashing"; return 0; }
+  [ "$cur" = "$MON_MODE_SHARED" ] && return 0   # already parked; keep the real one
+  printf '%s\n' "$cur" > "$PREV_MON_MODE_FILE"
+}
+
+mon_mode_restore_target() {
+  local prev=""
+  [ -f "$PREV_MON_MODE_FILE" ] && prev=$(cat "$PREV_MON_MODE_FILE")
+  rm -f "$PREV_MON_MODE_FILE"
+  printf '%s\n' "${prev:-$MON_MODE_FALLBACK}"
+}
+
 # --- display helpers -------------------------------------------------------
 display_on() {
   # TV becomes PRIMARY so freshly-launched game windows open on it; the
@@ -175,6 +210,7 @@ display_on() {
   # naming them on the command line would rewrite them in kwinoutputconfig.json
   # and silently undo whatever was set in System Settings.
   local desired MODE SCALE LOGICAL_W try
+  mon_mode_stash
   # The TV advertises a cut-down EDID (1080p only, no HDR) while it is asleep,
   # so give it a few tries to come back with its real mode list.
   for try in 1 2 3 4 5 6; do
@@ -184,23 +220,31 @@ display_on() {
   if [ -z "${desired:-}" ]; then
     log "no saved config for $TV; enabling with KWin's own defaults"
     kscreen-doctor output."$TV".enable output."$TV".position.0,0 output."$TV".priority.1 \
-                   output."$MON".enable output."$MON".priority.2
+                   output."$MON".enable output."$MON".priority.2 \
+                   output."$MON".mode."$MON_MODE_SHARED"
     sleep 1.5
     return 0
   fi
   eval "$desired"
-  log "enable $TV as primary ($MODE, scale $SCALE); keep $MON on (secondary, right)"
+  log "enable $TV as primary ($MODE, scale $SCALE); keep $MON on (secondary, right, $MON_MODE_SHARED)"
   kscreen-doctor \
     output."$TV".enable output."$TV".mode."$MODE" output."$TV".scale."$SCALE" \
     output."$TV".position.0,0 output."$TV".priority.1 \
-    output."$MON".enable output."$MON".position."${LOGICAL_W}",0 output."$MON".priority.2
+    output."$MON".enable output."$MON".position."${LOGICAL_W}",0 output."$MON".priority.2 \
+    output."$MON".mode."$MON_MODE_SHARED"
   sleep 1.5   # let the mode apply and xrandr geometry settle
 }
 
 display_off() {
-  log "disable $TV; $MON primary"
+  # Restoring the monitor's real refresh here hands the second pipe back, so
+  # ODM 2:1 becomes achievable again. DC does not always re-establish it on the
+  # mode change, which is exactly what dp-odm-watch exists for -- its 30s sweep
+  # picks this up now that it is no longer standing down for a second output.
+  local mon_mode_target; mon_mode_target=$(mon_mode_restore_target)
+  log "disable $TV; $MON primary ($mon_mode_target)"
   kscreen-doctor \
     output."$MON".enable output."$MON".position.0,0 output."$MON".priority.1 \
+    output."$MON".mode."$mon_mode_target" \
     output."$TV".disable
 }
 
