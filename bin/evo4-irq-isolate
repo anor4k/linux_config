@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Keep the Audient EVO4's USB controller interrupt away from amdgpu CPU stalls.
+#
+# The bug: on kernel 7.2 amdgpu's display core toggles idle power optimizations
+# every time the compositor enables/disables vblank interrupts
+# (amdgpu_dm_crtc_vblank_control_worker -> dc_allow_idle_optimizations). On
+# Navi 31 that path stalls the executing CPU for 10-20 ms with interrupts off
+# (MMIO wake of a power-gated block). snd-usb-audio keeps only ~9 ms of audio
+# queued in the host controller, so when the stall lands on the CPU that
+# services the xHCI interrupt the EVO4 runs dry and clicks. Nothing above the
+# USB layer sees an xrun. SCPM prevents disabling the GPU power features, and
+# forcing the GPU to "high" costs ~50 W, so instead:
+#
+#   1. pin every MSI vector of the EVO4's xHCI controller to one CPU,
+#   2. keep unbound kernel workqueues (where the amdgpu workers run) off it, and
+#   3. keep user-session tasks off it too (config/systemd/system/user.slice.d),
+#      because Firefox/Steam threads entering the same amdgpu paths stall it
+#      just the same.
+#
+# Measured over 120 s of playback: 47 stalls (8 audible, max 14 ms) with only
+# 1+2; 0 stalls with all three. amdgpu.dcdebugmask=0xa (display clock gating
+# and stutter off) additionally cuts the stall rate ~3x at no power cost.
+#
+# Runs as root at boot (evo4-irq-isolate.service) and whenever the EVO4 is
+# plugged in (60-evo4-irq-isolate.rules), so it copes with the device moving
+# between ports. Idempotent. irqbalance must stay disabled or it undoes step 1.
+#
+# Install: /usr/local/bin/evo4-irq-isolate
+set -euo pipefail
+
+CPU="${EVO4_IRQ_CPU:-5}"
+VID=2708
+PID=0006
+
+dev=""
+for f in /sys/bus/usb/devices/*/idVendor; do
+  d="${f%/idVendor}"
+  if [ "$(cat "$f")" = "$VID" ] && [ "$(cat "$d/idProduct")" = "$PID" ]; then
+    dev="$d"; break
+  fi
+done
+if [ -z "$dev" ]; then
+  echo "evo4-irq-isolate: EVO4 not connected, nothing to do"
+  exit 0
+fi
+
+# Walk up from the USB device to its host controller's PCI function.
+pci=$(readlink -f "$dev" | grep -oE '[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9]' | tail -1)
+[ -n "$pci" ] || { echo "evo4-irq-isolate: cannot resolve PCI controller for $dev" >&2; exit 1; }
+
+irqs=()
+if [ -d "/sys/bus/pci/devices/$pci/msi_irqs" ]; then
+  for i in "/sys/bus/pci/devices/$pci/msi_irqs"/*; do irqs+=("$(basename "$i")"); done
+else
+  irqs+=("$(cat "/sys/bus/pci/devices/$pci/irq")")
+fi
+
+for irq in "${irqs[@]}"; do
+  [ -w "/proc/irq/$irq/smp_affinity_list" ] || continue
+  echo "$CPU" > "/proc/irq/$irq/smp_affinity_list"
+done
+
+# Unbound workqueue mask: all CPUs except $CPU (sysfs wants hex).
+ncpu=$(nproc --all)
+mask=$(printf '%x' $(( ((1 << ncpu) - 1) & ~(1 << CPU) )))
+echo "$mask" > /sys/devices/virtual/workqueue/cpumask
+
+echo "evo4-irq-isolate: EVO4 at $(basename "$dev") on $pci; IRQs ${irqs[*]} -> CPU $CPU; unbound workqueue cpumask=$mask"

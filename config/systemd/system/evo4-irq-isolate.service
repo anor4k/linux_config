@@ -1,0 +1,12 @@
+[Unit]
+Description=Pin the EVO4's USB controller IRQ away from amdgpu CPU stalls
+# Install: /etc/systemd/system/evo4-irq-isolate.service  (systemctl enable)
+# Also pulled in by udev (60-evo4-irq-isolate.rules) on every EVO4 hot-plug.
+Conflicts=irqbalance.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/evo4-irq-isolate
+
+[Install]
+WantedBy=multi-user.target
