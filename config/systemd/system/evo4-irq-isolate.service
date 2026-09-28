@@ -2,11 +2,14 @@
 Description=Pin the EVO4's USB controller IRQ away from amdgpu CPU stalls
 # Install: /etc/systemd/system/evo4-irq-isolate.service  (systemctl enable)
 # Also pulled in by udev (60-evo4-irq-isolate.rules) on every EVO4 hot-plug.
+# Re-runs after every resume: suspend offlines CPU 5, the kernel moves the
+# pinned IRQ to the CPUs still online (0-4) and never moves it back.
 Conflicts=irqbalance.service
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/evo4-irq-isolate
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

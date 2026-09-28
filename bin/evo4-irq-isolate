@@ -23,7 +23,9 @@
 #
 # Runs as root at boot (evo4-irq-isolate.service) and whenever the EVO4 is
 # plugged in (60-evo4-irq-isolate.rules), so it copes with the device moving
-# between ports. Idempotent. irqbalance must stay disabled or it undoes step 1.
+# between ports, and after every resume: suspend takes CPU 5 offline, the kernel
+# moves the IRQ to whatever CPUs are still online (0-4) and never restores it.
+# Idempotent. irqbalance must stay disabled or it undoes step 1.
 #
 # Install: /usr/local/bin/evo4-irq-isolate
 set -euo pipefail
